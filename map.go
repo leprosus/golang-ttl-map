@@ -22,7 +22,9 @@ type Heap struct {
 }
 
 func New() Heap {
-	heap := Heap{}
+	heap := Heap{
+		data:  map[string]data{},
+		mutex: &sync.Mutex{}}
 
 	return heap
 }
@@ -69,7 +71,7 @@ func (heap *Heap) Save(filePath string) error {
 
 	writer := bufio.NewWriter(file)
 	for key, data := range heap.data {
-		line := fmt.Sprintf("%s\t%s\t%d", key, data.value, data.ttl)
+		line := fmt.Sprintf("%s\t%s\t%d\n", key, data.value, data.ttl)
 
 		if num, err := writer.WriteString(line); err == nil && num < len(line) {
 			return io.ErrShortWrite
@@ -95,7 +97,9 @@ func (heap *Heap) Restore(filePath string) error {
 	heap.mutex.Lock()
 	defer heap.mutex.Unlock()
 
-	heap = &Heap{}
+	heap = &Heap{
+		data:  map[string]data{},
+		mutex: &sync.Mutex{}}
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
