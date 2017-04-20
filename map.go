@@ -17,14 +17,16 @@ type data struct {
 }
 
 type Heap struct {
-	data  map[string]data
-	mutex *sync.Mutex
+	data     map[string]data
+	mutex    *sync.Mutex
+	filePath string
 }
 
-func New() Heap {
+func New(filePath string) Heap {
 	heap := Heap{
-		data:  map[string]data{},
-		mutex: &sync.Mutex{}}
+		data:     map[string]data{},
+		mutex:    &sync.Mutex{},
+		filePath: filePath}
 
 	return heap
 }
@@ -36,6 +38,8 @@ func (heap *Heap) Set(key string, value string, ttl int64) {
 	heap.data[key] = data{
 		value: value,
 		ttl:   time.Now().Unix() + ttl}
+
+	heap.write(true)
 }
 
 func (heap *Heap) Get(key string) string {
@@ -57,13 +61,25 @@ func (heap *Heap) Get(key string) string {
 
 func (heap *Heap) Del(key string) {
 	delete(heap.data, key)
+
+	heap.write(false)
 }
 
-func (heap *Heap) Save(filePath string) error {
-	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+func (heap *Heap) Save() error {
+	return heap.write(false)
+}
+
+func (heap *Heap) write(append bool) error {
+	mode := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if append {
+		mode = os.O_WRONLY | os.O_CREATE | os.O_APPEND
+	}
+
+	file, err := os.OpenFile(heap.filePath, mode, 0777)
 	if err != nil {
 		return err
 	}
+	defer file.Sync()
 	defer file.Close()
 
 	heap.mutex.Lock()
@@ -82,13 +98,13 @@ func (heap *Heap) Save(filePath string) error {
 	return nil
 }
 
-func (heap *Heap) Restore(filePath string) error {
-	_, err := os.Stat(filePath)
+func (heap *Heap) Restore() error {
+	_, err := os.Stat(heap.filePath)
 	if err != nil {
 		return err
 	}
 
-	file, err := os.OpenFile(filePath, os.O_RDONLY, 0777)
+	file, err := os.OpenFile(heap.filePath, os.O_RDONLY, 0777)
 	if err != nil {
 		return err
 	}
@@ -120,6 +136,8 @@ func (heap *Heap) Restore(filePath string) error {
 				ttl:   time.Now().Unix() + ttl}
 		}
 	}
+
+	go heap.Save()
 
 	return nil
 }

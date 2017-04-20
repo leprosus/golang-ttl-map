@@ -5,7 +5,7 @@
 ```go
 import ttl_map "github.com/leprosus/golang-ttl-map"
 
-ttlMap := ttl_map.New()
+ttlMap := ttl_map.New("/path/to/auto-save-file.tsv")
 ```
 
 ## Set/Get
@@ -19,17 +19,17 @@ value := ttlMap.Get("key")
 ## Save/Restore
 
 ```go
-ttlMap.Save("/path/to/file.tsv")
+ttlMap.Save()
 
-ttlMap.Restore("/path/to/file.tsv")
+ttlMap.Restore()
 ```
 
 ## List all methods
 
 
-* New() - creates new map
+* New(filePath) - creates new map
 * Set(key, value, ttl) - adds value by key with ttl in seconds
 * Get(key) - returns value or empty string
 * Del(key) - deletes value by key
-* Save(filePath) - saves map in tsv file
-* Restore(filePath) - restores map from tsv file
+* Save() - saves map in tsv file
+* Restore() - restores map from tsv file
