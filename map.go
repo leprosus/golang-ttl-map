@@ -38,8 +38,6 @@ func (heap *Heap) Set(key string, value string, ttl int64) {
 	heap.data[key] = data{
 		value: value,
 		ttl:   time.Now().Unix() + ttl}
-
-	heap.write(true)
 }
 
 func (heap *Heap) Get(key string) string {
@@ -64,24 +62,13 @@ func (heap *Heap) Del(key string) {
 	defer heap.mutex.Unlock()
 
 	delete(heap.data, key)
-
-	heap.write(false)
 }
 
 func (heap *Heap) Save() error {
 	heap.mutex.Lock()
 	defer heap.mutex.Unlock()
 
-	return heap.write(false)
-}
-
-func (heap *Heap) write(append bool) error {
-	mode := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
-	if append {
-		mode = os.O_WRONLY | os.O_CREATE | os.O_APPEND
-	}
-
-	file, err := os.OpenFile(heap.filePath, mode, 0777)
+	file, err := os.OpenFile(heap.filePath, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0777)
 	if err != nil {
 		return err
 	}
