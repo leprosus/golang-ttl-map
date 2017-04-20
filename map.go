@@ -60,12 +60,18 @@ func (heap *Heap) Get(key string) string {
 }
 
 func (heap *Heap) Del(key string) {
+	heap.mutex.Lock()
+	defer heap.mutex.Unlock()
+
 	delete(heap.data, key)
 
 	heap.write(false)
 }
 
 func (heap *Heap) Save() error {
+	heap.mutex.Lock()
+	defer heap.mutex.Unlock()
+
 	return heap.write(false)
 }
 
@@ -81,9 +87,6 @@ func (heap *Heap) write(append bool) error {
 	}
 	defer file.Sync()
 	defer file.Close()
-
-	heap.mutex.Lock()
-	defer heap.mutex.Unlock()
 
 	writer := bufio.NewWriter(file)
 	for key, data := range heap.data {
