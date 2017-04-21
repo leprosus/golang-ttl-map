@@ -71,7 +71,7 @@ func (heap *Heap) Del(key string) {
 }
 
 func (heap *Heap) Save() error {
-	file, err := os.OpenFile(heap.filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+	file, err := os.OpenFile(heap.filePath + ".sav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
 	if err != nil {
 		return err
 	}
@@ -95,6 +95,8 @@ func (heap *Heap) Save() error {
 		}
 		writer.Flush()
 	}
+
+	os.Rename(heap.filePath + ".sav", heap.filePath)
 
 	return nil
 }
