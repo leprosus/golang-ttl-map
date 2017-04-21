@@ -12,8 +12,8 @@ import (
 )
 
 type data struct {
-	value string
-	ttl   int64
+	value     string
+	timestamp int64
 }
 
 type Heap struct {
@@ -33,51 +33,62 @@ func New(filePath string) Heap {
 
 func (heap *Heap) Set(key string, value string, ttl int64) {
 	heap.mutex.Lock()
-	defer heap.mutex.Unlock()
 
 	heap.data[key] = data{
-		value: value,
-		ttl:   time.Now().Unix() + ttl}
+		value:     value,
+		timestamp: time.Now().Unix() + ttl}
+
+	heap.mutex.Unlock()
 }
 
 func (heap *Heap) Get(key string) string {
 	heap.mutex.Lock()
-	defer heap.mutex.Unlock()
 
-	if data, ok := heap.data[key]; ok {
-		if data.ttl < time.Now().Unix() {
-			heap.Del(key)
+	one, ok := heap.data[key]
+
+	heap.mutex.Unlock()
+
+	if ok {
+		if one.timestamp < time.Now().Unix() {
+			delete(heap.data, key)
 
 			return ""
 		} else {
-			return data.value
+			return one.value
 		}
 	} else {
 		return ""
 	}
+	return ""
 }
 
 func (heap *Heap) Del(key string) {
 	heap.mutex.Lock()
-	defer heap.mutex.Unlock()
 
 	delete(heap.data, key)
+
+	heap.mutex.Unlock()
 }
 
 func (heap *Heap) Save() error {
-	heap.mutex.Lock()
-	defer heap.mutex.Unlock()
-
-	file, err := os.OpenFile(heap.filePath, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0777)
+	file, err := os.OpenFile(heap.filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
 	if err != nil {
 		return err
 	}
 	defer file.Sync()
 	defer file.Close()
 
+	heap.mutex.Lock()
+	defer heap.mutex.Unlock()
+
 	writer := bufio.NewWriter(file)
 	for key, data := range heap.data {
-		line := fmt.Sprintf("%s\t%s\t%d\n", key, data.value, data.ttl)
+		if data.timestamp < time.Now().Unix() {
+			delete(heap.data, key)
+			continue
+		}
+
+		line := fmt.Sprintf("%s\t%s\t%d\n", key, data.value, data.timestamp)
 
 		if num, err := writer.WriteString(line); err == nil && num < len(line) {
 			return io.ErrShortWrite
@@ -103,9 +114,7 @@ func (heap *Heap) Restore() error {
 	heap.mutex.Lock()
 	defer heap.mutex.Unlock()
 
-	heap = &Heap{
-		data:  map[string]data{},
-		mutex: &sync.Mutex{}}
+	heap.data = map[string]data{}
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -122,12 +131,10 @@ func (heap *Heap) Restore() error {
 			}
 
 			heap.data[key] = data{
-				value: value,
-				ttl:   time.Now().Unix() + ttl}
+				value:     value,
+				timestamp: ttl}
 		}
 	}
-
-	go heap.Save()
 
 	return nil
 }
