@@ -103,15 +103,15 @@ func (heap *Heap) Save() {
 	heap.RUnlock()
 }
 
-func (heap *Heap) Restore() {
+func (heap *Heap) Restore() bool {
 	_, err := os.Stat(heap.filePath)
 	if err != nil {
-		return
+		return false
 	}
 
 	file, err := os.OpenFile(heap.filePath, os.O_RDONLY, 0777)
 	if err != nil {
-		return
+		return false
 	}
 	defer file.Close()
 
@@ -131,7 +131,7 @@ func (heap *Heap) Restore() {
 
 			timestamp, err := strconv.ParseInt(slices[2], 10, 64)
 			if err != nil {
-				return
+				return false
 			}
 
 			heap.data[key] = data{
@@ -139,4 +139,6 @@ func (heap *Heap) Restore() {
 				timestamp: timestamp}
 		}
 	}
+
+	return true
 }
