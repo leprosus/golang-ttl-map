@@ -20,30 +20,14 @@ type Heap struct {
 	sync.RWMutex
 	data     map[string]data
 	filePath string
-	queue    chan data
 }
 
 func New(filePath string) Heap {
 	heap := Heap{
 		data:     map[string]data{},
-		filePath: filePath,
-		queue:    make(chan data)}
-
-	go heap.handle()
+		filePath: filePath}
 
 	return heap
-}
-
-func (heap *Heap) handle() {
-	for one := range heap.queue {
-		heap.RLock()
-		heap.data[one.key] = data{
-			value:     one.value,
-			timestamp: one.timestamp}
-		heap.RUnlock()
-
-		heap.append(one)
-	}
 }
 
 func (heap *Heap) append(one data) {
@@ -68,18 +52,26 @@ func (heap *Heap) append(one data) {
 }
 
 func (heap *Heap) Set(key string, value string, ttl int64) {
-	heap.queue <- data{
-		key:       key,
+	one := data{
 		value:     value,
 		timestamp: time.Now().Unix() + ttl}
+
+	heap.Lock()
+	heap.data[key] = one
+	heap.Unlock()
+
+	one.key = key
+	go heap.append(one)
 }
 
 func (heap *Heap) Get(key string) string {
+	heap.RLock()
 	one, ok := heap.data[key]
+	heap.RUnlock()
 
 	if ok {
-		if one.timestamp < time.Now().Unix() {
-			delete(heap.data, key)
+		if one.timestamp <= time.Now().Unix() {
+			heap.Del(key)
 
 			return ""
 		} else {
@@ -98,25 +90,28 @@ func (heap *Heap) Del(key string) {
 	heap.Unlock()
 }
 
-func (heap *Heap) Save() error {
+func (heap *Heap) Save() {
 	os.Remove(heap.filePath)
 
-	for _, one := range heap.data {
-		heap.append(one)
+	heap.RLock()
+	for key, one := range heap.data {
+		if one.timestamp > time.Now().Unix() {
+			one.key = key
+			go heap.append(one)
+		}
 	}
-
-	return nil
+	heap.RUnlock()
 }
 
-func (heap *Heap) Restore() error {
+func (heap *Heap) Restore() {
 	_, err := os.Stat(heap.filePath)
 	if err != nil {
-		return err
+		return
 	}
 
 	file, err := os.OpenFile(heap.filePath, os.O_RDONLY, 0777)
 	if err != nil {
-		return err
+		return
 	}
 	defer file.Close()
 
@@ -134,16 +129,14 @@ func (heap *Heap) Restore() error {
 			key := slices[0]
 			value := slices[1]
 
-			ttl, err := strconv.ParseInt(slices[2], 10, 64)
+			timestamp, err := strconv.ParseInt(slices[2], 10, 64)
 			if err != nil {
-				return err
+				return
 			}
 
 			heap.data[key] = data{
 				value:     value,
-				timestamp: ttl}
+				timestamp: timestamp}
 		}
 	}
-
-	return nil
 }
