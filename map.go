@@ -3,7 +3,6 @@ package ttl_map
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -12,41 +11,71 @@ import (
 )
 
 type data struct {
+	key       string
 	value     string
 	timestamp int64
 }
 
 type Heap struct {
+	sync.RWMutex
 	data     map[string]data
-	mutex    *sync.Mutex
 	filePath string
+	queue    chan data
 }
 
 func New(filePath string) Heap {
 	heap := Heap{
 		data:     map[string]data{},
-		mutex:    &sync.Mutex{},
-		filePath: filePath}
+		filePath: filePath,
+		queue:    make(chan data)}
+
+	go heap.handle()
 
 	return heap
 }
 
-func (heap *Heap) Set(key string, value string, ttl int64) {
-	heap.mutex.Lock()
+func (heap *Heap) handle() {
+	for one := range heap.queue {
+		heap.RLock()
+		heap.data[one.key] = data{
+			value:     one.value,
+			timestamp: one.timestamp}
+		heap.RUnlock()
 
-	heap.data[key] = data{
+		heap.append(one)
+	}
+}
+
+func (heap *Heap) append(one data) {
+	file, err := os.OpenFile(heap.filePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
+	if err != nil {
+		return
+	}
+	defer file.Sync()
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	if one.timestamp < time.Now().Unix() {
+		return
+	}
+
+	line := fmt.Sprintf("%s\t%s\t%d\n", one.key, one.value, one.timestamp)
+
+	if num, err := writer.WriteString(line); err == nil && num < len(line) {
+		return
+	}
+	writer.Flush()
+}
+
+func (heap *Heap) Set(key string, value string, ttl int64) {
+	heap.queue <- data{
+		key:       key,
 		value:     value,
 		timestamp: time.Now().Unix() + ttl}
-
-	heap.mutex.Unlock()
 }
 
 func (heap *Heap) Get(key string) string {
-	heap.mutex.Lock()
-
 	one, ok := heap.data[key]
-
-	heap.mutex.Unlock()
 
 	if ok {
 		if one.timestamp < time.Now().Unix() {
@@ -59,44 +88,22 @@ func (heap *Heap) Get(key string) string {
 	} else {
 		return ""
 	}
+
 	return ""
 }
 
 func (heap *Heap) Del(key string) {
-	heap.mutex.Lock()
-
+	heap.Lock()
 	delete(heap.data, key)
-
-	heap.mutex.Unlock()
+	heap.Unlock()
 }
 
 func (heap *Heap) Save() error {
-	file, err := os.OpenFile(heap.filePath+".sav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
-	if err != nil {
-		return err
+	os.Remove(heap.filePath)
+
+	for _, one := range heap.data {
+		heap.append(one)
 	}
-	defer file.Sync()
-	defer file.Close()
-
-	heap.mutex.Lock()
-	defer heap.mutex.Unlock()
-
-	writer := bufio.NewWriter(file)
-	for key, data := range heap.data {
-		if data.timestamp < time.Now().Unix() {
-			delete(heap.data, key)
-			continue
-		}
-
-		line := fmt.Sprintf("%s\t%s\t%d\n", key, data.value, data.timestamp)
-
-		if num, err := writer.WriteString(line); err == nil && num < len(line) {
-			return io.ErrShortWrite
-		}
-		writer.Flush()
-	}
-
-	os.Rename(heap.filePath+".sav", heap.filePath)
 
 	return nil
 }
@@ -113,8 +120,8 @@ func (heap *Heap) Restore() error {
 	}
 	defer file.Close()
 
-	heap.mutex.Lock()
-	defer heap.mutex.Unlock()
+	heap.Lock()
+	defer heap.Unlock()
 
 	heap.data = map[string]data{}
 
