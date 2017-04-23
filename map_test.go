@@ -1,12 +1,12 @@
 package ttl_map
 
 import (
-	"testing"
 	"fmt"
-	"os"
-	"time"
 	"io/ioutil"
+	"os"
 	"strings"
+	"testing"
+	"time"
 )
 
 func TestNew(t *testing.T) {
