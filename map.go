@@ -18,6 +18,7 @@ type data struct {
 
 type Heap struct {
 	sync.RWMutex
+	sync.WaitGroup
 	data     map[string]data
 	filePath string
 	queue    chan data
@@ -101,16 +102,33 @@ func (heap *Heap) Del(key string) {
 }
 
 func (heap *Heap) Save() {
-	os.Remove(heap.filePath)
+	file, err := os.OpenFile(heap.filePath+".sav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+	if err != nil {
+		return
+	}
+
+	writer := bufio.NewWriter(file)
 
 	heap.RLock()
 	for key, one := range heap.data {
-		if one.timestamp > time.Now().Unix() {
-			one.key = key
-			heap.queue <- one
+		if one.timestamp < time.Now().Unix() {
+			continue
+		}
+
+		line := fmt.Sprintf("%s\t%s\t%d\n", key, one.value, one.timestamp)
+
+		if num, err := writer.WriteString(line); err == nil && num < len(line) {
+			continue
 		}
 	}
 	heap.RUnlock()
+
+	writer.Flush()
+
+	file.Close()
+
+	os.Remove(heap.filePath)
+	os.Rename(heap.filePath+".sav", heap.filePath)
 }
 
 func (heap *Heap) Restore() bool {
