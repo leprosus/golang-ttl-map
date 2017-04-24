@@ -20,14 +20,24 @@ type Heap struct {
 	sync.RWMutex
 	data     map[string]data
 	filePath string
+	queue    chan data
 }
 
 func New(filePath string) Heap {
 	heap := Heap{
 		data:     map[string]data{},
-		filePath: filePath}
+		filePath: filePath,
+		queue:    make(chan data, 1000)}
+
+	go heap.handle()
 
 	return heap
+}
+
+func (heap *Heap) handle() {
+	for one := range heap.queue {
+		heap.append(one)
+	}
 }
 
 func (heap *Heap) append(one data) {
@@ -61,7 +71,7 @@ func (heap *Heap) Set(key string, value string, ttl int64) {
 	heap.Unlock()
 
 	one.key = key
-	go heap.append(one)
+	heap.queue <- one
 }
 
 func (heap *Heap) Get(key string) string {
@@ -97,7 +107,7 @@ func (heap *Heap) Save() {
 	for key, one := range heap.data {
 		if one.timestamp > time.Now().Unix() {
 			one.key = key
-			go heap.append(one)
+			heap.queue <- one
 		}
 	}
 	heap.RUnlock()
