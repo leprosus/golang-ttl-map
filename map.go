@@ -19,98 +19,123 @@ type data struct {
 type Heap struct {
 	sync.RWMutex
 	sync.WaitGroup
+
 	data     map[string]data
 	filePath string
 	queue    chan data
+
+	errFn     func(err error)
+	errFnInit bool
 }
 
-func New(filePath string) Heap {
+func New(filePath string) *Heap {
 	heap := Heap{
 		data:     map[string]data{},
 		filePath: filePath,
-		queue:    make(chan data, 1000)}
+		queue:    make(chan data, 1000),
+	}
 
 	go heap.handle()
 
-	return heap
+	return &heap
 }
 
-func (heap *Heap) handle() {
-	for one := range heap.queue {
-		heap.append(one)
+func (h *Heap) handle() {
+	var err error
+	for one := range h.queue {
+		err = h.append(one)
+		if err != nil && h.errFnInit {
+			h.errFn(err)
+		}
 	}
 }
 
-func (heap *Heap) append(one data) {
-	file, err := os.OpenFile(heap.filePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
-	if err != nil {
-		return
-	}
-	defer file.Sync()
-	defer file.Close()
-
-	writer := bufio.NewWriter(file)
+func (h *Heap) append(one data) (err error) {
 	if one.timestamp < time.Now().Unix() {
 		return
 	}
 
-	line := fmt.Sprintf("%s\t%s\t%d\n", one.key, one.value, one.timestamp)
-
-	if num, err := writer.WriteString(line); err == nil && num < len(line) {
+	var file *os.File
+	file, err = os.OpenFile(h.filePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
+	if err != nil {
 		return
 	}
-	writer.Flush()
+	defer func() {
+		_ = file.Sync()
+	}()
+	defer func() {
+		_ = file.Close()
+	}()
+
+	writer := bufio.NewWriter(file)
+
+	line := fmt.Sprintf("%s\t%s\t%d\n", one.key, one.value, one.timestamp)
+
+	var num int
+	num, err = writer.WriteString(line)
+	if err == nil && num < len(line) {
+		return
+	}
+
+	err = writer.Flush()
+
+	return
 }
 
-func (heap *Heap) Set(key string, value string, ttl int64) {
+func (h *Heap) Error(fn func(err error)) {
+	h.errFn = fn
+	h.errFnInit = true
+}
+
+func (h *Heap) Set(key string, value string, ttl int64) {
 	one := data{
 		value:     value,
 		timestamp: time.Now().Unix() + ttl}
 
-	heap.Lock()
-	heap.data[key] = one
-	heap.Unlock()
+	h.Lock()
+	h.data[key] = one
+	h.Unlock()
 
 	one.key = key
-	heap.queue <- one
+	h.queue <- one
 }
 
-func (heap *Heap) Get(key string) string {
-	heap.RLock()
-	one, ok := heap.data[key]
-	heap.RUnlock()
+func (h *Heap) Get(key string) (val string, ok bool) {
+	var one data
+	h.RLock()
+	one, ok = h.data[key]
+	h.RUnlock()
 
 	if ok {
 		if one.timestamp <= time.Now().Unix() {
-			heap.Del(key)
+			h.Del(key)
 
-			return ""
+			ok = false
 		} else {
-			return one.value
+			val = one.value
 		}
-	} else {
-		return ""
 	}
 
-	return ""
+	return
 }
 
-func (heap *Heap) Del(key string) {
-	heap.Lock()
-	delete(heap.data, key)
-	heap.Unlock()
+func (h *Heap) Del(key string) {
+	h.Lock()
+	delete(h.data, key)
+	h.Unlock()
 }
 
-func (heap *Heap) Save() {
-	file, err := os.OpenFile(heap.filePath+".sav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+func (h *Heap) Save() (err error) {
+	var file *os.File
+	file, err = os.OpenFile(h.filePath+".sav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
 	if err != nil {
 		return
 	}
 
 	writer := bufio.NewWriter(file)
 
-	heap.RLock()
-	for key, one := range heap.data {
+	h.RLock()
+	for key, one := range h.data {
 		if one.timestamp < time.Now().Unix() {
 			continue
 		}
@@ -121,32 +146,49 @@ func (heap *Heap) Save() {
 			continue
 		}
 	}
-	heap.RUnlock()
+	h.RUnlock()
 
-	writer.Flush()
+	err = writer.Flush()
+	if err != nil {
+		return
+	}
 
-	file.Close()
+	err = file.Close()
+	if err != nil {
+		return
+	}
 
-	os.Remove(heap.filePath)
-	os.Rename(heap.filePath+".sav", heap.filePath)
+	err = os.Remove(h.filePath)
+	if err != nil {
+		return
+	}
+
+	err = os.Rename(h.filePath+".sav", h.filePath)
+
+	return
 }
 
-func (heap *Heap) Restore() bool {
-	_, err := os.Stat(heap.filePath)
+func (h *Heap) Restore() (err error) {
+	_, err = os.Stat(h.filePath)
 	if err != nil {
-		return false
+		return
 	}
 
-	file, err := os.OpenFile(heap.filePath, os.O_RDONLY, 0777)
+	var file *os.File
+	file, err = os.OpenFile(h.filePath, os.O_RDONLY, 0777)
 	if err != nil {
-		return false
+		return
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
-	heap.Lock()
-	defer heap.Unlock()
+	h.Lock()
+	defer h.Unlock()
 
-	heap.data = map[string]data{}
+	h.data = map[string]data{}
+
+	var timestamp int64
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -157,16 +199,16 @@ func (heap *Heap) Restore() bool {
 			key := slices[0]
 			value := slices[1]
 
-			timestamp, err := strconv.ParseInt(slices[2], 10, 64)
+			timestamp, err = strconv.ParseInt(slices[2], 10, 64)
 			if err != nil {
-				return false
+				return err
 			}
 
-			heap.data[key] = data{
+			h.data[key] = data{
 				value:     value,
 				timestamp: timestamp}
 		}
 	}
 
-	return true
+	return
 }
