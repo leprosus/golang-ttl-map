@@ -51,7 +51,7 @@ func (h *Heap) handle() {
 }
 
 func (h *Heap) append(one data) (err error) {
-	if one.timestamp < time.Now().Unix() {
+	if one.timestamp != -1 && one.timestamp < time.Now().Unix() {
 		return
 	}
 
@@ -88,9 +88,19 @@ func (h *Heap) Error(fn func(err error)) {
 }
 
 func (h *Heap) Set(key string, value string, ttl int64) {
+	if ttl == 0 {
+		return
+	}
+
 	one := data{
-		value:     value,
-		timestamp: time.Now().Unix() + ttl}
+		value: value,
+	}
+
+	if ttl > 0 {
+		one.timestamp = time.Now().Unix() + ttl
+	} else if ttl < 0 {
+		one.timestamp = -1
+	}
 
 	h.Lock()
 	h.data[key] = one
@@ -107,7 +117,7 @@ func (h *Heap) Get(key string) (val string, ok bool) {
 	h.RUnlock()
 
 	if ok {
-		if one.timestamp <= time.Now().Unix() {
+		if one.timestamp != -1 && one.timestamp <= time.Now().Unix() {
 			h.Del(key)
 
 			ok = false
@@ -136,7 +146,7 @@ func (h *Heap) Save() (err error) {
 
 	h.RLock()
 	for key, one := range h.data {
-		if one.timestamp < time.Now().Unix() {
+		if one.timestamp != -1 && one.timestamp < time.Now().Unix() {
 			continue
 		}
 
