@@ -135,6 +135,14 @@ func (h *Heap) Del(key string) {
 	h.Unlock()
 }
 
+func (h *Heap) Range(fn func(key string, value string, ttl int64)) {
+	h.Lock()
+	for _, data := range h.data {
+		fn(data.key, data.value, data.timestamp)
+	}
+	h.Unlock()
+}
+
 func (h *Heap) Save() (err error) {
 	var file *os.File
 	file, err = os.OpenFile(h.filePath+".sav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
