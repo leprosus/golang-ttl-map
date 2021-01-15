@@ -146,10 +146,12 @@ func (h *Heap) Del(key string) {
 
 func (h *Heap) Range(fn func(key string, value string, ttl int64)) {
 	h.Lock()
-	for _, data := range h.data {
-		fn(data.key, data.value, data.timestamp)
-	}
+	data := h.data
 	h.Unlock()
+
+	for _, d := range data {
+		fn(d.key, d.value, d.timestamp)
+	}
 }
 
 func (h *Heap) Save() (err error) {
