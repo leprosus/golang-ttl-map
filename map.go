@@ -131,7 +131,9 @@ func (h *Heap) Get(key string) (val string, ok bool) {
 }
 
 func (h *Heap) Del(key string) {
-	val, ok := h.Get(key)
+	h.RLock()
+	one, ok := h.data[key]
+	h.RUnlock()
 	if !ok {
 		return
 	}
@@ -140,11 +142,8 @@ func (h *Heap) Del(key string) {
 	delete(h.data, key)
 	h.Unlock()
 
-	h.queue <- data{
-		key:       key,
-		value:     val,
-		timestamp: 0,
-	}
+	one.timestamp = 0
+	h.queue <- one
 }
 
 func (h *Heap) Range(fn func(key string, value string, ttl int64)) {
