@@ -89,6 +89,7 @@ func (h *Heap) Set(key string, value string, ttl int64) {
 	}
 
 	one := data{
+		key:       key,
 		value:     value,
 		timestamp: time.Now().Unix(),
 	}
