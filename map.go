@@ -51,10 +51,6 @@ func (h *Heap) handle() {
 }
 
 func (h *Heap) append(one data) (err error) {
-	if one.timestamp != -1 && one.timestamp < time.Now().Unix() {
-		return
-	}
-
 	var file *os.File
 	file, err = os.OpenFile(h.filePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
 	if err != nil {
