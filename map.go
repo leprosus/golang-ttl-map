@@ -56,7 +56,7 @@ func (h *Heap) append(one data) (err error) {
 	}
 
 	var file *os.File
-	file, err = os.OpenFile(h.filePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
+	file, err = os.OpenFile(h.filePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
 	if err != nil {
 		return
 	}
@@ -93,11 +93,12 @@ func (h *Heap) Set(key string, value string, ttl int64) {
 	}
 
 	one := data{
-		value: value,
+		value:     value,
+		timestamp: time.Now().Unix(),
 	}
 
 	if ttl > 0 {
-		one.timestamp = time.Now().Unix() + ttl
+		one.timestamp += ttl
 	} else if ttl < 0 {
 		one.timestamp = -1
 	}
@@ -130,7 +131,18 @@ func (h *Heap) Get(key string) (val string, ok bool) {
 }
 
 func (h *Heap) Del(key string) {
+	val, ok := h.Get(key)
+	if !ok {
+		return
+	}
+
 	h.Lock()
+	h.queue <- data{
+		key:       key,
+		value:     val,
+		timestamp: 0,
+	}
+
 	delete(h.data, key)
 	h.Unlock()
 }
@@ -145,7 +157,7 @@ func (h *Heap) Range(fn func(key string, value string, ttl int64)) {
 
 func (h *Heap) Save() (err error) {
 	var file *os.File
-	file, err = os.OpenFile(h.filePath+".sav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+	file, err = os.OpenFile(h.filePath+".sav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
 		return
 	}
@@ -193,7 +205,7 @@ func (h *Heap) Restore() (err error) {
 	}
 
 	var file *os.File
-	file, err = os.OpenFile(h.filePath, os.O_RDONLY, 0777)
+	file, err = os.OpenFile(h.filePath, os.O_RDONLY, 0755)
 	if err != nil {
 		return
 	}
