@@ -235,6 +235,7 @@ func (h *Heap) Restore() (err error) {
 			}
 
 			h.data[key] = data{
+				key:       key,
 				value:     value,
 				timestamp: timestamp}
 		}
