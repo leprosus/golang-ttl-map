@@ -137,14 +137,14 @@ func (h *Heap) Del(key string) {
 	}
 
 	h.Lock()
+	delete(h.data, key)
+	h.Unlock()
+
 	h.queue <- data{
 		key:       key,
 		value:     val,
 		timestamp: 0,
 	}
-
-	delete(h.data, key)
-	h.Unlock()
 }
 
 func (h *Heap) Range(fn func(key string, value string, ttl int64)) {
