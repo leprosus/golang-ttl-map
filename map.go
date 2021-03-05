@@ -2,37 +2,42 @@ package ttl_map
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/gob"
 	"fmt"
+	"io/ioutil"
 	"os"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
 
-type data struct {
-	key       string
-	value     string
-	timestamp int64
+type Data struct {
+	Key       string
+	Value     interface{}
+	Timestamp int64
 }
 
 type Heap struct {
 	sync.RWMutex
 	sync.WaitGroup
 
-	data     map[string]data
+	data     map[string]Data
 	filePath string
-	queue    chan data
+	queue    chan Data
 
 	errFn     func(err error)
 	errFnInit bool
 }
 
+type snapshot struct {
+	Data map[string]Data
+}
+
 func New(filePath string) *Heap {
 	heap := Heap{
-		data:     map[string]data{},
+		data:     map[string]Data{},
 		filePath: filePath,
-		queue:    make(chan data, 1000),
+		queue:    make(chan Data, 1000),
 	}
 
 	go heap.handle()
@@ -50,7 +55,7 @@ func (h *Heap) handle() {
 	}
 }
 
-func (h *Heap) append(one data) (err error) {
+func (h *Heap) append(one Data) (err error) {
 	var file *os.File
 	file, err = os.OpenFile(h.filePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
 	if err != nil {
@@ -65,7 +70,7 @@ func (h *Heap) append(one data) (err error) {
 
 	writer := bufio.NewWriter(file)
 
-	line := fmt.Sprintf("%s\t%s\t%d\n", one.key, one.value, one.timestamp)
+	line := fmt.Sprintf("%s\t%s\t%d\n", one.Key, one.Value, one.Timestamp)
 
 	var num int
 	num, err = writer.WriteString(line)
@@ -83,44 +88,44 @@ func (h *Heap) Error(fn func(err error)) {
 	h.errFnInit = true
 }
 
-func (h *Heap) Set(key string, value string, ttl int64) {
+func (h *Heap) Set(key string, value interface{}, ttl int64) {
 	if ttl == 0 {
 		return
 	}
 
-	one := data{
-		key:       key,
-		value:     value,
-		timestamp: time.Now().Unix(),
+	one := Data{
+		Key:       key,
+		Value:     value,
+		Timestamp: time.Now().Unix(),
 	}
 
 	if ttl > 0 {
-		one.timestamp += ttl
+		one.Timestamp += ttl
 	} else if ttl < 0 {
-		one.timestamp = -1
+		one.Timestamp = -1
 	}
 
 	h.Lock()
 	h.data[key] = one
 	h.Unlock()
 
-	one.key = key
+	one.Key = key
 	h.queue <- one
 }
 
-func (h *Heap) Get(key string) (val string, ok bool) {
-	var one data
+func (h *Heap) Get(key string) (val interface{}, ok bool) {
+	var one Data
 	h.RLock()
 	one, ok = h.data[key]
 	h.RUnlock()
 
 	if ok {
-		if one.timestamp != -1 && one.timestamp <= time.Now().Unix() {
+		if one.Timestamp != -1 && one.Timestamp <= time.Now().Unix() {
 			h.Del(key)
 
 			ok = false
 		} else {
-			val = one.value
+			val = one.Value
 		}
 	}
 
@@ -139,23 +144,37 @@ func (h *Heap) Del(key string) {
 	delete(h.data, key)
 	h.Unlock()
 
-	h.queue <- data{
-		key:       key,
-		timestamp: 0,
+	h.queue <- Data{
+		Key:       key,
+		Timestamp: 0,
 	}
 }
 
-func (h *Heap) Range(fn func(key string, value string, ttl int64)) {
+func (h *Heap) Range(fn func(key string, value interface{}, ttl int64)) {
 	h.Lock()
 	data := h.data
 	h.Unlock()
 
 	for _, d := range data {
-		fn(d.key, d.value, d.timestamp)
+		fn(d.Key, d.Value, d.Timestamp)
 	}
 }
 
 func (h *Heap) Save() (err error) {
+	var snapshot = snapshot{
+		Data: map[string]Data{},
+	}
+
+	h.RLock()
+	for key, one := range h.data {
+		if one.Timestamp != -1 && one.Timestamp < time.Now().Unix() {
+			continue
+		}
+
+		snapshot.Data[key] = one
+	}
+	h.RUnlock()
+
 	var file *os.File
 	file, err = os.OpenFile(h.filePath+".sav", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
@@ -164,19 +183,20 @@ func (h *Heap) Save() (err error) {
 
 	writer := bufio.NewWriter(file)
 
-	h.RLock()
-	for key, one := range h.data {
-		if one.timestamp != -1 && one.timestamp < time.Now().Unix() {
-			continue
-		}
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
 
-		line := fmt.Sprintf("%s\t%s\t%d\n", key, one.value, one.timestamp)
-
-		if num, err := writer.WriteString(line); err == nil && num < len(line) {
-			continue
-		}
+	err = enc.Encode(snapshot)
+	if err != nil {
+		return
 	}
-	h.RUnlock()
+
+	bs := buf.Bytes()
+
+	_, err = writer.Write(bs)
+	if err != nil {
+		return
+	}
 
 	err = writer.Flush()
 	if err != nil {
@@ -204,42 +224,30 @@ func (h *Heap) Restore() (err error) {
 		return
 	}
 
-	var file *os.File
-	file, err = os.OpenFile(h.filePath, os.O_RDONLY, 0755)
+	var bs []byte
+	bs, err = ioutil.ReadFile(h.filePath)
 	if err != nil {
 		return
 	}
-	defer func() {
-		_ = file.Close()
-	}()
+
+	var buf bytes.Buffer
+	buf.Write(bs)
+
+	dec := gob.NewDecoder(&buf)
+
+	var snapshot = snapshot{
+		Data: map[string]Data{},
+	}
+
+	err = dec.Decode(&snapshot)
+	if err != nil {
+		return
+	}
 
 	h.Lock()
 	defer h.Unlock()
 
-	h.data = map[string]data{}
-
-	var timestamp int64
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		slices := strings.Split(line, "\t")
-		if len(slices) == 3 {
-			key := slices[0]
-			value := slices[1]
-
-			timestamp, err = strconv.ParseInt(slices[2], 10, 64)
-			if err != nil {
-				return err
-			}
-
-			h.data[key] = data{
-				key:       key,
-				value:     value,
-				timestamp: timestamp}
-		}
-	}
+	h.data = snapshot.Data
 
 	return
 }

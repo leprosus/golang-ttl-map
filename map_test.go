@@ -2,9 +2,7 @@ package ttl_map
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
-	"strings"
 	"testing"
 	"time"
 )
@@ -12,25 +10,28 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	filePath := "./new_tmp.tsv"
+	filePath := "./new_tmp"
 	heap := New(filePath)
 
 	switch fmt.Sprintf("%T", heap) {
-	case "ttl_map.Heap":
+	case "*ttl_map.Heap":
 	default:
-		t.Error("Expected New return Heap var")
+		t.Error("New return Heap var")
 	}
 }
 
 func TestSet(t *testing.T) {
 	t.Parallel()
 
-	filePath := "./set_tmp.tsv"
+	filePath := "./set_tmp"
 	heap := New(filePath)
 
 	defer func() {
 		time.Sleep(time.Second)
-		os.Remove(filePath)
+		err := os.Remove(filePath)
+		if err != nil {
+			t.Error(err)
+		}
 	}()
 
 	heap.Set("key", "value", 60)
@@ -39,36 +40,45 @@ func TestSet(t *testing.T) {
 
 	_, err := os.Stat(filePath)
 	if err != nil {
-		t.Error("Expected after Set file ", filePath, "will be saved")
+		t.Error("After Set procedure a file ", filePath, "wasn't saved")
 	}
 }
 
 func TestGet(t *testing.T) {
 	t.Parallel()
 
-	filePath := "./get_tmp.tsv"
+	filePath := "./get_tmp"
 	heap := New(filePath)
 
 	defer func() {
 		time.Sleep(time.Second)
-		os.Remove(filePath)
+		err := os.Remove(filePath)
+		if err != nil {
+			t.Error(err)
+		}
 	}()
 
 	heap.Set("key", "value", 1)
 
-	value := heap.Get("key")
+	value, ok := heap.Get("key")
+	if !ok {
+		t.Error("Can't get expected value by `key`")
+	}
 
-	if value != "value" {
-		t.Error("Expected Get returns set value")
+	if value.(string) != "value" {
+		t.Error("Get returns set value")
 		return
 	}
 
 	time.Sleep(1 * time.Second)
 
-	value = heap.Get("key")
+	value, ok = heap.Get("key")
+	if ok {
+		t.Error("Get unexpected value by `key`")
+	}
 
-	if value != "" {
-		t.Error("Expected Get returns empty value for key with non-valid ttl")
+	if value != nil {
+		t.Error("Get returns empty value for key with non-valid ttl")
 		return
 	}
 }
@@ -76,80 +86,88 @@ func TestGet(t *testing.T) {
 func TestDel(t *testing.T) {
 	t.Parallel()
 
-	filePath := "./del_tmp.tsv"
+	filePath := "./del_tmp"
 	heap := New(filePath)
 
 	defer func() {
 		time.Sleep(time.Second)
-		os.Remove(filePath)
+		_ = os.Remove(filePath)
 	}()
 
 	heap.Set("key", "value", 1)
 
 	heap.Del("key")
 
-	value := heap.Get("key")
+	value, ok := heap.Get("key")
+	if ok {
+		t.Error("Get unexpected value by `key`")
+	}
 
-	if value != "" {
-		t.Error("Expected Get returns empty value after deleting")
+	if value != nil {
+		t.Error("Get returns empty value after deleting")
 	}
 }
 
 func TestSave(t *testing.T) {
 	t.Parallel()
 
-	filePath := "./save_tmp.tsv"
+	filePath := "./save_tmp"
 	heap := New(filePath)
 
 	defer func() {
 		time.Sleep(time.Second)
-		os.Remove(filePath)
+		err := os.Remove(filePath)
+		if err != nil {
+			t.Error(err)
+		}
 	}()
-
-	now := time.Now().Unix()
 
 	heap.Set("key", "value", 1)
 
-	heap.Save()
-	time.Sleep(1 * time.Second)
-
-	bytes, err := ioutil.ReadFile(filePath)
+	err := heap.Save()
 	if err != nil {
-		t.Error("Expected Save saves data to file")
-		return
+		t.Error(err)
 	}
 
-	line := string(bytes)
-	testStr := fmt.Sprintf("key\tvalue\t%d", now)
-	testStr = testStr[:len(testStr)-1]
-
-	if !strings.Contains(line, testStr) {
-		t.Error("Expected Save saves target data")
-		return
-	}
+	heap.Wait()
 }
 
 func TestRestore(t *testing.T) {
 	t.Parallel()
 
-	filePath := "./restore_tmp.tsv"
+	filePath := "./restore_tmp"
 	heap := New(filePath)
 
 	defer func() {
 		time.Sleep(time.Second)
-		os.Remove(filePath)
+		err := os.Remove(filePath)
+		if err != nil {
+			t.Error(err)
+		}
 	}()
 
 	heap.Set("key", "value", 60)
 
-	heap.Save()
-	time.Sleep(1 * time.Second)
+	err := heap.Save()
+	if err != nil {
+		t.Error(err)
+	}
+
+	heap.Wait()
 
 	heap = New(filePath)
-	heap.Restore()
+	err = heap.Restore()
+	if err != nil {
+		t.Error(err)
+	}
 
-	if heap.Get("key") != "value" {
-		t.Error("Expected Restore restores data from file")
+	value, ok := heap.Get("key")
+	if !ok {
+		t.Error("Can't get expected value by `key`")
+	}
+
+	if value.(string) != "value" {
+		t.Error("Restore restores data from file")
 		return
 	}
 }
@@ -157,7 +175,7 @@ func TestRestore(t *testing.T) {
 func TestConcurrency(t *testing.T) {
 	t.Parallel()
 
-	filePath := "./goroutin_tmp.tsv"
+	filePath := "./goroutin_tmp"
 	heap := New(filePath)
 
 	go func() {
@@ -173,5 +191,8 @@ func TestConcurrency(t *testing.T) {
 	}()
 
 	time.Sleep(15 * time.Second)
-	os.Remove(filePath)
+	err := os.Remove(filePath)
+	if err != nil {
+		t.Error(err)
+	}
 }
