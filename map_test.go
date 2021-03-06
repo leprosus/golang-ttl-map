@@ -27,7 +27,7 @@ func TestSet(t *testing.T) {
 	heap := New(filePath)
 
 	defer func() {
-		time.Sleep(time.Second)
+		heap.Wait()
 		err := os.Remove(filePath)
 		if err != nil {
 			t.Error(err)
@@ -51,7 +51,7 @@ func TestGet(t *testing.T) {
 	heap := New(filePath)
 
 	defer func() {
-		time.Sleep(time.Second)
+		heap.Wait()
 		err := os.Remove(filePath)
 		if err != nil {
 			t.Error(err)
@@ -70,7 +70,7 @@ func TestGet(t *testing.T) {
 		return
 	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(time.Second)
 
 	value, ok = heap.Get("key")
 	if ok {
@@ -90,8 +90,11 @@ func TestDel(t *testing.T) {
 	heap := New(filePath)
 
 	defer func() {
-		time.Sleep(time.Second)
-		_ = os.Remove(filePath)
+		heap.Wait()
+		err := os.Remove(filePath)
+		if err != nil {
+			t.Error(err)
+		}
 	}()
 
 	heap.Set("key", "value", 1)
@@ -115,7 +118,7 @@ func TestSave(t *testing.T) {
 	heap := New(filePath)
 
 	defer func() {
-		time.Sleep(time.Second)
+		heap.Wait()
 		err := os.Remove(filePath)
 		if err != nil {
 			t.Error(err)
@@ -139,7 +142,8 @@ func TestRestore(t *testing.T) {
 	heap := New(filePath)
 
 	defer func() {
-		time.Sleep(time.Second)
+		heap.Wait()
+
 		err := os.Remove(filePath)
 		if err != nil {
 			t.Error(err)
@@ -147,6 +151,7 @@ func TestRestore(t *testing.T) {
 	}()
 
 	heap.Set("key", "value", 60)
+	heap.Set("key1", "value", 60)
 
 	err := heap.Save()
 	if err != nil {
