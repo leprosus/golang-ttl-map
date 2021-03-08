@@ -197,6 +197,11 @@ func (h *Heap) Support(kind interface{}) {
 }
 
 func (h *Heap) Save() (err error) {
+	withSaving := atomic.LoadUint32(&h.withSaving)
+	if withSaving == 0 {
+		return
+	}
+
 	h.fileMx.Lock()
 	defer h.fileMx.Unlock()
 
@@ -248,6 +253,11 @@ func (h *Heap) Save() (err error) {
 }
 
 func (h *Heap) Restore() (err error) {
+	withSaving := atomic.LoadUint32(&h.withSaving)
+	if withSaving == 0 {
+		return
+	}
+
 	h.fileMx.Lock()
 	defer h.fileMx.Unlock()
 
