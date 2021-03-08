@@ -177,6 +177,56 @@ func TestRestore(t *testing.T) {
 	}
 }
 
+func TestSupport(t *testing.T) {
+	t.Parallel()
+
+	filePath := "./support"
+	heap := New(filePath)
+
+	defer func() {
+		heap.Wait()
+		err := os.Remove(filePath)
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	heap.Set("object", map[string]string{"key": "value"}, 60)
+
+	heap.Support(map[string]string{})
+
+	err := heap.Save()
+	if err != nil {
+		t.Error(err)
+	}
+
+	heap.Wait()
+
+	heap = New(filePath)
+	err = heap.Restore()
+	if err != nil {
+		t.Error(err)
+	}
+
+	val, ok := heap.Get("object")
+	if !ok {
+		t.Error("Can't get map structure")
+	}
+
+	var obj = val.(map[string]string)
+
+	var objVal string
+
+	objVal, ok = obj["key"]
+	if !ok {
+		t.Error("Can't get value from map structure")
+	}
+
+	if objVal != "value" {
+		t.Error("Object doesn't contain expected value by the key")
+	}
+}
+
 func TestConcurrency(t *testing.T) {
 	t.Parallel()
 

@@ -171,6 +171,10 @@ func (h *Heap) Range(fn func(key string, value interface{}, ttl int64)) {
 	}
 }
 
+func (h *Heap) Support(kind interface{}) {
+	gob.Register(kind)
+}
+
 func (h *Heap) Save() (err error) {
 	h.fileMx.Lock()
 	defer h.fileMx.Unlock()
