@@ -5,7 +5,8 @@
 ```go
 import ttl_map "github.com/leprosus/golang-ttl-map"
 
-heap := ttl_map.New("/path/to/auto-save-file.tsv")
+heap := ttl_map.New()
+heap.Path("/path/to/auto-save-file.tsv")
 ```
 
 ## Set/Get
@@ -41,8 +42,8 @@ heap.Restore()
 
 ## List all methods
 
-
-* New(filePath) - creates new map
+* New() - creates new map
+* Path(filePath) - sets file path to save/autosave/restore
 * Set(key, value, ttl) - adds value by key with ttl in seconds
 * Get(key) - returns value or empty string
 * Del(key) - deletes value by key

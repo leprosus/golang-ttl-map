@@ -10,8 +10,7 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	filePath := "./new_tmp"
-	heap := New(filePath)
+	heap := New()
 
 	switch fmt.Sprintf("%T", heap) {
 	case "*ttl_map.Heap":
@@ -24,7 +23,8 @@ func TestSet(t *testing.T) {
 	t.Parallel()
 
 	filePath := "./set_tmp"
-	heap := New(filePath)
+	heap := New()
+	heap.Path(filePath)
 
 	defer func() {
 		heap.Wait()
@@ -48,7 +48,8 @@ func TestGet(t *testing.T) {
 	t.Parallel()
 
 	filePath := "./get_tmp"
-	heap := New(filePath)
+	heap := New()
+	heap.Path(filePath)
 
 	defer func() {
 		heap.Wait()
@@ -87,7 +88,8 @@ func TestDel(t *testing.T) {
 	t.Parallel()
 
 	filePath := "./del_tmp"
-	heap := New(filePath)
+	heap := New()
+	heap.Path(filePath)
 
 	defer func() {
 		heap.Wait()
@@ -115,7 +117,8 @@ func TestSave(t *testing.T) {
 	t.Parallel()
 
 	filePath := "./save_tmp"
-	heap := New(filePath)
+	heap := New()
+	heap.Path(filePath)
 
 	defer func() {
 		heap.Wait()
@@ -139,7 +142,8 @@ func TestRestore(t *testing.T) {
 	t.Parallel()
 
 	filePath := "./restore_tmp"
-	heap := New(filePath)
+	heap := New()
+	heap.Path(filePath)
 
 	defer func() {
 		heap.Wait()
@@ -160,7 +164,8 @@ func TestRestore(t *testing.T) {
 
 	heap.Wait()
 
-	heap = New(filePath)
+	heap = New()
+	heap.Path(filePath)
 	err = heap.Restore()
 	if err != nil {
 		t.Error(err)
@@ -181,7 +186,8 @@ func TestSupport(t *testing.T) {
 	t.Parallel()
 
 	filePath := "./support"
-	heap := New(filePath)
+	heap := New()
+	heap.Path(filePath)
 
 	defer func() {
 		heap.Wait()
@@ -202,7 +208,8 @@ func TestSupport(t *testing.T) {
 
 	heap.Wait()
 
-	heap = New(filePath)
+	heap = New()
+	heap.Path(filePath)
 	err = heap.Restore()
 	if err != nil {
 		t.Error(err)
@@ -231,7 +238,8 @@ func TestConcurrency(t *testing.T) {
 	t.Parallel()
 
 	filePath := "./goroutin_tmp"
-	heap := New(filePath)
+	heap := New()
+	heap.Path(filePath)
 
 	go func() {
 		for i := 0; i < 1000000; i++ {

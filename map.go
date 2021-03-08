@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,28 +22,42 @@ type Heap struct {
 	fileMx *sync.Mutex
 	wg     *sync.WaitGroup
 
-	data     map[string]Data
-	filePath string
-	queue    chan Data
+	data map[string]Data
+
+	filePath   string
+	withSaving uint32
+	queue      chan Data
 
 	errFn     func(err error)
 	errFnInit bool
 }
 
-func New(filePath string) *Heap {
-	heap := Heap{
-		dataMx: &sync.RWMutex{},
-		fileMx: &sync.Mutex{},
-		wg:     &sync.WaitGroup{},
+func New() *Heap {
+	return &Heap{
+		dataMx:     &sync.RWMutex{},
+		wg:         &sync.WaitGroup{},
+		withSaving: 0,
 
-		data:     map[string]Data{},
-		filePath: filePath,
-		queue:    make(chan Data, 1000),
+		data: map[string]Data{},
 	}
+}
 
-	go heap.handle()
+func (h *Heap) Path(filePath string) {
+	withSaving := atomic.LoadUint32(&h.withSaving)
 
-	return &heap
+	if withSaving == 0 {
+		h.filePath = filePath
+		h.queue = make(chan Data, 1000)
+		h.fileMx = &sync.Mutex{}
+
+		go h.handle()
+
+		atomic.StoreUint32(&h.withSaving, 1)
+	} else {
+		h.fileMx.Lock()
+		h.filePath = filePath
+		h.fileMx.Unlock()
+	}
 }
 
 func (h *Heap) handle() {
@@ -119,8 +134,11 @@ func (h *Heap) Set(key string, value interface{}, ttl int64) {
 
 	data.Key = key
 
-	h.wg.Add(1)
-	h.queue <- data
+	withSaving := atomic.LoadUint32(&h.withSaving)
+	if withSaving > 0 {
+		h.wg.Add(1)
+		h.queue <- data
+	}
 }
 
 func (h *Heap) Get(key string) (val interface{}, ok bool) {
@@ -154,10 +172,13 @@ func (h *Heap) Del(key string) {
 	delete(h.data, key)
 	h.dataMx.Unlock()
 
-	h.wg.Add(1)
-	h.queue <- Data{
-		Key:       key,
-		Timestamp: 0,
+	withSaving := atomic.LoadUint32(&h.withSaving)
+	if withSaving > 0 {
+		h.wg.Add(1)
+		h.queue <- Data{
+			Key:       key,
+			Timestamp: 0,
+		}
 	}
 }
 
