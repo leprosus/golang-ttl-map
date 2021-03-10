@@ -223,6 +223,8 @@ func (h *Heap) Save() (err error) {
 	)
 
 	h.dataMx.RLock()
+	defer h.dataMx.RUnlock()
+
 	for _, data := range h.data {
 		if data.Timestamp != -1 && data.Timestamp < time.Now().Unix() {
 			continue
@@ -243,7 +245,6 @@ func (h *Heap) Save() (err error) {
 			return
 		}
 	}
-	h.dataMx.RUnlock()
 
 	_ = os.Remove(h.filePath)
 
