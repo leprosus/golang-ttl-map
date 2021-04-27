@@ -47,7 +47,7 @@ func (h *Heap) Path(filePath string) {
 
 	if withSaving == 0 {
 		h.filePath = filePath
-		h.queue = make(chan Data, 1000)
+		h.queue = make(chan Data, 1024)
 		h.fileMx = &sync.Mutex{}
 
 		go h.handle()
@@ -183,8 +183,12 @@ func (h *Heap) Del(key string) {
 }
 
 func (h *Heap) Range(fn func(key string, value interface{}, ttl int64)) {
+	data := map[string]Data{}
+
 	h.dataMx.Lock()
-	data := h.data
+	for key, val := range h.data {
+		data[key] = val
+	}
 	h.dataMx.Unlock()
 
 	for _, d := range data {
